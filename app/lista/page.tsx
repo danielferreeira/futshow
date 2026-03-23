@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  Search, Calendar as CalendarIcon, Clock, 
-  CheckCircle2, AlertCircle, DollarSign, ListFilter 
+  Search, Clock, CheckCircle2, AlertCircle, ListFilter, Loader2 
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -12,26 +11,33 @@ import { ptBR } from "date-fns/locale";
 export default function ListaAgendamentosPage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadBookings = useCallback(async () => {
+    setLoading(true);
     const { data } = await supabase
       .from('bookings')
       .select('*, courts(name)')
       .order('start_time', { ascending: false });
     if (data) setBookings(data);
+    setLoading(false);
   }, []);
 
   useEffect(() => { loadBookings(); }, [loadBookings]);
 
-  // Função para alternar o status de pagamento
   const togglePayment = async (id: string, currentStatus: string) => {
+    // Alterna entre pago e pendente
     const newStatus = currentStatus === 'pago' ? 'pendente' : 'pago';
+    
     const { error } = await supabase
       .from('bookings')
       .update({ payment_status: newStatus })
       .eq('id', id);
 
-    if (!error) loadBookings();
+    if (!error) {
+      // Atualiza apenas o item na lista local para ser instantâneo
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, payment_status: newStatus } : b));
+    }
   };
 
   const filtered = bookings.filter(b => 
@@ -39,18 +45,18 @@ export default function ListaAgendamentosPage() {
     b.courts?.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  if (loading) return <div className="flex h-screen items-center justify-center bg-[#0A0F1C]"><Loader2 className="animate-spin text-[#FFC700]" size={40} /></div>;
+
   return (
-    <div className="w-full max-w-7xl mx-auto mt-4 space-y-6 pb-20 px-4">
+    <div className="w-full max-w-7xl mx-auto mt-4 space-y-6 pb-20 px-4 text-white">
       
-      {/* HEADER DA LISTA */}
-      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-5 rounded-[32px] border border-slate-800 shadow-xl gap-4">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl gap-4">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-slate-800 rounded-2xl text-[#FFC700] shadow-inner">
-            <ListFilter size={24} />
-          </div>
+          <div className="p-3 bg-slate-800 rounded-2xl text-[#FFC700] shadow-inner"><ListFilter size={24} /></div>
           <div>
-            <h1 className="text-xl font-black text-white uppercase tracking-tighter italic">Lista de Agendamento</h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Visão Geral dos Horários</p>
+            <h1 className="text-xl font-black uppercase tracking-tighter italic">Lista de Agendamentos</h1>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest italic">Controle de Pagamentos</p>
           </div>
         </div>
 
@@ -60,69 +66,59 @@ export default function ListaAgendamentosPage() {
             type="text" 
             value={search} 
             onChange={e => setSearch(e.target.value)} 
-            placeholder="Buscar por cliente ou quadra..." 
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3 pl-12 text-sm text-white focus:border-[#FFC700] outline-none transition-all" 
+            placeholder="Buscar cliente ou quadra..." 
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3.5 pl-12 text-sm text-white focus:border-[#FFC700] outline-none transition-all font-bold" 
           />
         </div>
       </div>
 
-      {/* TABELA DE AGENDAMENTOS GRUPADOS */}
-      <div className="bg-[#0F172A] rounded-[32px] border border-slate-800 overflow-hidden shadow-2xl">
+      {/* TABELA */}
+      <div className="bg-[#0F172A] rounded-[40px] border border-slate-800 overflow-hidden shadow-2xl">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-slate-900/50">
-              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Cliente / Modalidade</th>
-              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Quadra / Período</th>
-              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Financeiro</th>
+            <tr className="bg-slate-900/50 border-b border-slate-800">
+              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Atleta / Modalidade</th>
+              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Horário / Quadra</th>
+              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic text-center">Status de Pagamento</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
-            {filtered.length > 0 ? filtered.map(b => (
+            {filtered.map(b => (
               <tr key={b.id} className="hover:bg-white/[0.02] transition-colors group">
                 <td className="p-6">
-                  <div className="font-bold text-white text-sm uppercase leading-tight">{b.customer_name}</div>
-                  <div className="text-[10px] text-[#FFC700] font-black uppercase mt-1 tracking-wider italic">
-                    {b.sport}
-                  </div>
+                  <div className="font-black text-white text-base uppercase italic tracking-tighter">{b.customer_name}</div>
+                  <div className="text-[10px] text-[#FFC700] font-black uppercase mt-1 italic opacity-80">{b.sport}</div>
                 </td>
                 
                 <td className="p-6">
-                  {/* Visual seguindo sua imagem: Hora Grande + Detalhes abaixo */}
-                  <div className="flex items-center gap-2 text-white font-black text-lg">
-                    <Clock size={16} className="text-[#FFC700]" />
+                  <div className="flex items-center gap-2 text-white font-black text-lg italic">
+                    <Clock size={16} className="text-slate-600" />
                     {format(parseISO(b.start_time), "HH:mm")}
-                    <span className="text-slate-600 font-medium">às</span>
-                    {b.end_time ? format(parseISO(b.end_time), "HH:mm") : '--:--'}
+                    <span className="text-slate-600 text-sm font-bold">HRS</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1 uppercase font-bold tracking-tight">
-                    {b.courts?.name} • {format(parseISO(b.start_time), "dd/MM", { locale: ptBR })}
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-black italic">
+                    {b.courts?.name} • {format(parseISO(b.start_time), "dd 'de' MMMM", { locale: ptBR })}
                   </div>
                 </td>
 
                 <td className="p-6 text-center">
                   <button 
                     onClick={() => togglePayment(b.id, b.payment_status)}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase transition-all border w-full max-w-[140px] justify-center ${
+                    className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all border-2 w-full max-w-[160px] justify-center ${
                       b.payment_status === 'pago'
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-lg shadow-emerald-500/5'
-                      : 'bg-red-500/10 text-red-400 border-red-500/20 shadow-lg shadow-red-500/5'
+                      ? 'bg-emerald-500 text-black border-emerald-500 shadow-lg shadow-emerald-500/20'
+                      : 'bg-transparent text-red-500 border-red-500/30 hover:border-red-500 shadow-lg'
                     }`}
                   >
                     {b.payment_status === 'pago' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                    {b.payment_status || 'pendente'}
+                    {b.payment_status === 'pago' ? 'PAGAMENTO OK' : 'PENDENTE'}
                   </button>
-                  <div className="text-[10px] text-slate-600 font-bold mt-2 italic">
-                    Valor: R$ {Number(b.price || 0).toFixed(2)}
+                  <div className="text-[11px] text-white font-black mt-2 italic tracking-widest">
+                    R$ {Number(b.price || 0).toFixed(2)}
                   </div>
                 </td>
               </tr>
-            )) : (
-              <tr>
-                <td colSpan={3} className="p-20 text-center text-slate-600 font-bold uppercase tracking-widest text-xs">
-                  Nenhum registro encontrado
-                </td>
-              </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>

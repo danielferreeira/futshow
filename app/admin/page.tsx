@@ -3,18 +3,23 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  Settings, LayoutGrid, Plus, 
-  Trash2, Edit, Loader2, Check, AlertCircle, X
+  Settings, Plus, Trash2, Edit, Loader2, Check, X
 } from "lucide-react";
+
+// Importando o componente que você já tem pronto
+import ConfirmModal from "@/components/ConfirmModal"; 
 
 export default function AdminPage() {
   const [courts, setCourts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentCourt, setCurrentCourt] = useState<any>(null); // Quadra sendo editada
+  const [currentCourt, setCurrentCourt] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Refs para os inputs do modal
+  // ESTADOS PARA O CONFIRM MODAL
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [courtToDelete, setCourtToDelete] = useState<{id: string, name: string} | null>(null);
+
   const nameRef = useRef<HTMLInputElement>(null);
   const rateRef = useRef<HTMLInputElement>(null);
 
@@ -41,7 +46,32 @@ export default function AdminPage() {
     setIsModalOpen(false);
   };
 
-  // Salva ou atualiza a quadra com base nos dados do modal
+  // 1. FUNÇÃO QUE APENAS ABRE O MODAL
+  const handleRequestDelete = (id: string, name: string) => {
+    setCourtToDelete({ id, name });
+    setIsConfirmOpen(true);
+  };
+
+  // 2. FUNÇÃO QUE REALMENTE EXECUTA A EXCLUSÃO
+  const handleConfirmDelete = async () => {
+    if (!courtToDelete) return;
+
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('courts')
+      .delete()
+      .eq('id', courtToDelete.id);
+
+    if (error) {
+      alert("Erro ao remover: " + error.message);
+    } else {
+      await loadCourts();
+      setIsConfirmOpen(false);
+      setCourtToDelete(null);
+    }
+    setIsSaving(false);
+  };
+
   const handleSaveCourt = async () => {
     if (!nameRef.current || !rateRef.current) return;
     
@@ -54,20 +84,15 @@ export default function AdminPage() {
     
     let error;
     if (currentCourt) {
-      // MODO EDIÇÃO
       const { error: err } = await supabase
         .from('courts')
         .update(updatedCourt)
         .eq('id', currentCourt.id);
       error = err;
     } else {
-      // MODO CRIAÇÃO (Opcional - pode manter a criação padrão se preferir)
       const { error: err } = await supabase
         .from('courts')
-        .insert({
-          ...updatedCourt,
-          is_active: true
-        });
+        .insert({ ...updatedCourt, is_active: true });
       error = err;
     }
 
@@ -77,26 +102,6 @@ export default function AdminPage() {
       await loadCourts();
       handleCloseModal();
     }
-    
-    setIsSaving(false);
-  };
-
-  const handleDeleteCourt = async (id: string, name: string) => {
-    if (!confirm(`Tem certeza que deseja remover a "${name}"? Esta ação não pode ser desfeita.`)) {
-      return;
-    }
-
-    setIsSaving(true);
-    const { error } = await supabase
-      .from('courts')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert("Erro ao remover: " + error.message);
-    } else {
-      await loadCourts();
-    }
     setIsSaving(false);
   };
 
@@ -104,7 +109,7 @@ export default function AdminPage() {
     <div className="w-full max-w-7xl mx-auto mt-4 space-y-6 pb-20 px-4">
       
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl gap-4 relative z-10">
+      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-5 rounded-[32px] border border-slate-800 shadow-xl gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-slate-800 rounded-2xl text-[#FFC700] shadow-inner">
             <Settings size={24} />
@@ -117,9 +122,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Botão Adicionar (pode abrir modal também se preferir) */}
         <button 
-          onClick={() => handleOpenEditModal(null)} // Abre o modal em modo criação
+          onClick={() => handleOpenEditModal(null)}
           className="flex items-center gap-2 bg-[#FFC700] hover:bg-yellow-400 text-black px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
         >
           <Plus size={16} /> Adicionar Quadra
@@ -136,36 +140,31 @@ export default function AdminPage() {
           {courts.map(court => (
             <div key={court.id} className="bg-[#0F172A] border border-slate-800 rounded-[32px] p-8 space-y-6 shadow-2xl relative group transition-all hover:border-slate-700">
               
-              {/* Ícones de Ação no topo direito (Lápis e Lixeira) */}
               <div className="absolute top-6 right-6 flex items-center gap-2 z-20">
                 <button 
                   onClick={() => handleOpenEditModal(court)}
                   className="p-2 text-slate-600 hover:text-[#FFC700] hover:bg-[#FFC700]/10 rounded-xl transition-all"
-                  title="Editar Quadra"
                 >
                   <Edit size={18} />
                 </button>
                 <button 
-                  onClick={() => handleDeleteCourt(court.id, court.name)}
+                  onClick={() => handleRequestDelete(court.id, court.name)} // Trocado o confirm nativo por essa chamada
                   className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                  title="Excluir Quadra"
                 >
                   <Trash2 size={18} />
                 </button>
               </div>
 
               <div className="space-y-4 relative z-10">
-                {/* Nome */}
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Identificação</label>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 text-white">Identificação</label>
                   <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3.5 px-4 text-white font-bold text-sm">
                     {court.name}
                   </div>
                 </div>
 
-                {/* Valor */}
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço da Hora</label>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 text-white">Preço da Hora</label>
                   <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3.5 px-4 text-white font-bold text-sm">
                     R$ {court.hourly_rate?.toFixed(2)}
                   </div>
@@ -180,63 +179,64 @@ export default function AdminPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
           <div className="bg-[#0F172A] border border-slate-800 w-full max-w-md rounded-[40px] shadow-2xl border-t-4 border-t-[#FFC700] p-10 animate-in zoom-in duration-200 text-white relative">
-            <div className="flex justify-between items-start mb-8">
+            <div className="flex justify-between items-start mb-8 text-white">
               <div>
                 <h2 className="text-2xl font-black uppercase tracking-tighter leading-none italic">
                   {currentCourt ? 'Editar Quadra' : 'Nova Quadra'}
                 </h2>
-                <p className="text-[#FFC700] text-xs font-bold mt-2 uppercase tracking-widest">
-                  {currentCourt ? currentCourt.name : 'Configurar Espaço'}
-                </p>
               </div>
               <button onClick={handleCloseModal} className="bg-slate-800 p-2 rounded-full text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             
             <div className="space-y-6">
-              {/* Input: Nome */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Quadra</label>
                 <input 
-                  autoFocus
                   type="text" 
                   ref={nameRef}
                   defaultValue={currentCourt?.name || ""}
-                  placeholder="Ex: Quadra Central"
                   className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 text-white focus:border-[#FFC700] outline-none font-bold text-sm" 
                 />
               </div>
 
-              {/* Input: Preço */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço da Hora (R$)</label>
                 <input 
                   type="number" 
-                  step="0.01"
                   ref={rateRef}
                   defaultValue={currentCourt?.hourly_rate || ""}
-                  placeholder="Ex: 85.00"
                   className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 text-white focus:border-[#FFC700] outline-none font-bold text-sm" 
                 />
               </div>
 
-              {/* Botões do Modal */}
-              <div className="flex flex-col gap-3 pt-6">
-                <button 
-                  onClick={handleSaveCourt} 
-                  disabled={isSaving}
-                  className="w-full bg-[#FFC700] hover:bg-yellow-400 disabled:opacity-50 text-black font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 uppercase tracking-widest text-xs transition-all active:scale-95"
-                >
-                  {isSaving ? <Loader2 className="animate-spin" /> : <Check size={20} />} 
-                  Confirmar e Salvar
-                </button>
-              </div>
+              <button 
+                onClick={handleSaveCourt} 
+                disabled={isSaving}
+                className="w-full bg-[#FFC700] hover:bg-yellow-400 disabled:opacity-50 text-black font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 uppercase tracking-widest text-xs transition-all active:scale-95"
+              >
+                {isSaving ? <Loader2 className="animate-spin" /> : <Check size={20} />} 
+                Confirmar e Salvar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* FEEDBACK DE SALVAMENTO */}
-      {isSaving && (
+      {/* O SEU COMPONENTE CONFIRMMODAL INTEGRADO */}
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Confirmar Exclusão?"
+        message={`Tem certeza que deseja remover a "${courtToDelete?.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Sim, Remover"
+        cancelText="Cancelar"
+        isLoading={isSaving}
+        variant="danger"
+      />
+
+      {/* FEEDBACK DE SALVAMENTO NO CANTO */}
+      {isSaving && !isConfirmOpen && (
         <div className="fixed bottom-10 right-10 bg-[#FFC700] text-black px-6 py-4 rounded-3xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 shadow-2xl z-[150] animate-bounce">
           <Loader2 size={16} className="animate-spin" /> Sincronizando...
         </div>

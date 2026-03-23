@@ -1,152 +1,182 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  TrendingUp, 
-  Clock, 
-  Beer, 
-  Activity,
-  Plus,
-  ArrowRight
+  Home, Calendar, Trophy, Package, Receipt, 
+  DollarSign, ArrowRight, Loader2, Users, 
+  Clock, TrendingUp, Star
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-export default function Home() {
-  const [stats, setStats] = useState({ 
-    bookingsToday: 0, 
-    revenue: 0, 
-    openOrders: 0,
-    freeSlots: 0 
-  });
+export default function DashboardPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  
+  // Estados para os resumos rápidos
+  const [stats, setStats] = useState({
+    activeOrders: 0,
+    bookingsToday: 0,
+    activeTournaments: 0,
+    dailyRevenue: 0
+  });
 
-  useEffect(() => {
-      async function getDashboardData() {
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Comandas Ativas
+    const { count: ordersCount } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'aberta');
+
+    // 2. Agendamentos de Hoje
+    const { count: bookingsCount } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .gte('start_time', today)
+      .lte('start_time', today + 'T23:59:59');
+
+    // 3. Torneios em Andamento
+    const { count: tourneyCount } = await supabase
+      .from('tournaments')
+      .select('*', { count: 'exact', head: true })
+      .neq('status', 'finalizado');
+
+    // 4. Faturamento do Dia (Vendas pagas hoje)
+    const { data: dailySales } = await supabase
+      .from('orders')
+      .select('total')
+      .eq('status', 'paga')
+      .gte('created_at', today);
     
-    // 1. Receita Real (Somente o que está como 'pago' nos agendamentos)
-    const { data: revenueData } = await supabase
-      .from('bookings')
-      .select('price')
-      .eq('payment_status', 'pago');
-
-    const totalRevenue = revenueData?.reduce((acc, b) => acc + Number(b.price || 0), 0) || 0;
-
-    // 2. Receita Pendente (O que ainda falta receber)
-    const { data: pendingData } = await supabase
-      .from('bookings')
-      .select('price')
-      .eq('payment_status', 'pendente');
-
-    const pendingRevenue = pendingData?.reduce((acc, b) => acc + Number(b.price || 0), 0) || 0;
+    const revenue = dailySales?.reduce((acc, curr) => acc + Number(curr.total), 0) || 0;
 
     setStats({
-      bookingsToday: 0, // Pode manter sua lógica de count aqui
-      revenue: totalRevenue,
-      openOrders: pendingRevenue, // Usando esse card para mostrar o pendente
-      freeSlots: 0
+      activeOrders: ordersCount || 0,
+      bookingsToday: bookingsCount || 0,
+      activeTournaments: tourneyCount || 0,
+      dailyRevenue: revenue
     });
+    
     setLoading(false);
-  }
-
-    getDashboardData();
   }, []);
 
+  useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
+
+  if (loading) return <div className="flex h-screen items-center justify-center bg-[#0A0F1C]"><Loader2 className="animate-spin text-[#FFC700]" size={40} /></div>;
+
   return (
-    <div className="w-full max-w-7xl mx-auto mt-4 space-y-8">
+    <div className="w-full max-w-7xl mx-auto mt-4 space-y-10 pb-20 px-4 text-white">
       
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+      {/* BOAS VINDAS E DATA */}
+      <div className="flex flex-col md:flex-row justify-between items-end gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Visão Geral</h1>
-          <p className="text-slate-400 mt-1">Status real da Futshow agora.</p>
+          <p className="text-[#FFC700] text-[10px] font-black uppercase tracking-[0.3em] mb-2 italic">Dashboard Principal</p>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">
+            Arena Futshow <span className="text-slate-700">|</span> <span className="text-slate-400">Maravilha</span>
+          </h1>
         </div>
+        <div className="text-right">
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest leading-none">Status de Hoje</p>
+          <p className="text-lg font-black uppercase italic text-white mt-1">
+            {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
+          </p>
+        </div>
+      </div>
+
+      {/* CARDS DE RESUMO OPERACIONAL */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        <div className="flex items-center gap-3">
-          <Link href="/comandas" className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors border border-slate-700">
-            <Beer size={18} className="text-[#FFC700]" />
-            Abrir Comanda
-          </Link>
-          <Link href="/agendar" className="flex items-center gap-2 px-4 py-2 bg-[#FFC700] hover:bg-yellow-400 text-black rounded-xl font-bold transition-colors shadow-lg shadow-yellow-500/20">
-            <Plus size={18} />
-            Novo Agendamento
-          </Link>
-        </div>
-      </div>
-
-      {/* Cards de Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Jogos Hoje" value={stats.bookingsToday.toString()} subtitle="Confirmados no sistema" icon={<Activity size={22} className="text-emerald-400" />} />
-        <MetricCard title="Receita Total" value={`R$ ${stats.revenue.toFixed(2)}`} subtitle="Comandas pagas" icon={<TrendingUp size={22} className="text-blue-400" />} />
-        <MetricCard title="Comandas Abertas" value={stats.openOrders.toString()} subtitle="Consumo em aberto" icon={<Beer size={22} className="text-orange-400" />} />
-        <MetricCard title="Vagas Livres" value={stats.freeSlots.toString()} subtitle="Horários disponíveis" icon={<Clock size={22} className="text-purple-400" />} />
-      </div>
-
-      {/* Seção Inferior */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-10">
-        
-        <div className="lg:col-span-2 bg-[#0F172A] rounded-2xl border border-slate-800 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-white">Status das Quadras</h2>
-            <span className="flex items-center gap-2 text-xs font-medium bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              AO VIVO
-            </span>
+        {/* Receita do Dia */}
+        <div className="bg-[#0F172A] border border-slate-800 p-8 rounded-[40px] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+            <TrendingUp size={60} className="text-emerald-500" />
           </div>
-
-          <div className="space-y-4">
-            <CourtStatus name="Quadra 1 (Vôlei)" status="Ocupada" time="18:00 - 19:00" players="João e galera" />
-            <CourtStatus name="Quadra 2 (Beach Tennis)" status="Livre" time="Agora" players="--" isFree />
-          </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Caixa (Hoje)</p>
+          <h3 className="text-3xl font-black text-emerald-500 italic">R$ {stats.dailyRevenue.toFixed(2)}</h3>
         </div>
 
-        <div className="bg-[#0F172A] rounded-2xl border border-slate-800 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-white">Últimas Vendas</h2>
-            <Link href="/comandas" className="text-sm text-[#FFC700] hover:underline flex items-center gap-1">
-              Ver todas <ArrowRight size={14} />
-            </Link>
+        {/* Comandas */}
+        <div onClick={() => router.push('/comandas')} className="bg-[#0F172A] border border-slate-800 p-8 rounded-[40px] shadow-2xl cursor-pointer hover:border-[#FFC700]/50 transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+            <Receipt size={60} className="text-[#FFC700]" />
           </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Comandas Ativas</p>
+          <h3 className="text-3xl font-black text-white italic">{stats.activeOrders} <span className="text-xs text-slate-600">contas</span></h3>
+        </div>
 
-          <div className="space-y-3">
-             <p className="text-xs text-slate-500 text-center py-4">As vendas aparecerão aqui após serem lançadas.</p>
+        {/* Agendamentos */}
+        <div onClick={() => router.push('/agendar')} className="bg-[#0F172A] border border-slate-800 p-8 rounded-[40px] shadow-2xl cursor-pointer hover:border-[#FFC700]/50 transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+            <Calendar size={60} className="text-[#FFC700]" />
           </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Reservas Hoje</p>
+          <h3 className="text-3xl font-black text-white italic">{stats.bookingsToday} <span className="text-xs text-slate-600">horários</span></h3>
+        </div>
+
+        {/* Torneios */}
+        <div onClick={() => router.push('/campeonatos')} className="bg-[#0F172A] border border-slate-800 p-8 rounded-[40px] shadow-2xl cursor-pointer hover:border-[#FFC700]/50 transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+            <Trophy size={60} className="text-[#FFC700]" />
+          </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Torneios Ativos</p>
+          <h3 className="text-3xl font-black text-white italic">{stats.activeTournaments} <span className="text-xs text-slate-600">em curso</span></h3>
         </div>
 
       </div>
-    </div>
-  );
-}
 
-// Subcomponentes
-function MetricCard({ title, value, subtitle, icon }: any) {
-  return (
-    <div className="bg-[#0F172A] p-5 rounded-2xl border border-slate-800 flex flex-col justify-between min-h-[140px]">
-      <div className="flex items-start justify-between">
-        <p className="text-slate-400 text-sm font-medium">{title}</p>
-        <div className="p-2 bg-slate-800/50 rounded-lg">{icon}</div>
-      </div>
-      <div className="mt-4">
-        <h3 className="text-2xl font-bold text-white">{value}</h3>
-        <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
+      {/* GUIA DO SISTEMA / ATALHOS RÁPIDOS */}
+      <div className="space-y-6">
+        <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-600 ml-4 italic">Guia de Gestão</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          {/* Módulo 1 */}
+          <div className="bg-slate-900/30 border border-slate-800/50 p-10 rounded-[48px] space-y-6">
+            <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center text-[#FFC700]">
+              <Calendar size={32} />
+            </div>
+            <div>
+              <h4 className="text-xl font-black uppercase italic leading-none mb-3">Reservas</h4>
+              <p className="text-slate-500 text-xs font-bold leading-relaxed uppercase">Controle o mapa de ocupação das quadras de vôlei, beach tennis e futevôlei.</p>
+            </div>
+            <button onClick={() => router.push('/agendar')} className="flex items-center gap-2 text-[10px] font-black uppercase text-[#FFC700] hover:gap-4 transition-all">
+              Acessar Mapa <ArrowRight size={14} />
+            </button>
+          </div>
 
-function CourtStatus({ name, status, time, players, isFree = false }: any) {
-  return (
-    <div className={`flex items-center justify-between p-4 rounded-xl border ${isFree ? 'bg-slate-800/20 border-slate-800' : 'bg-slate-800 border-slate-700'}`}>
-      <div>
-        <h4 className="font-bold text-white text-sm">{name}</h4>
-        <p className="text-xs text-slate-400 mt-0.5">{players}</p>
-      </div>
-      <div className="text-right">
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${isFree ? 'bg-slate-700 text-slate-300' : 'bg-[#FFC700] text-black'}`}>
-          {status}
-        </span>
-        <p className="text-xs font-medium text-slate-400 mt-1">{time}</p>
+          {/* Módulo 2 */}
+          <div className="bg-slate-900/30 border border-slate-800/50 p-10 rounded-[48px] space-y-6">
+            <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center text-[#FFC700]">
+              <Receipt size={32} />
+            </div>
+            <div>
+              <h4 className="text-xl font-black uppercase italic leading-none mb-3">Vendas & Bar</h4>
+              <p className="text-slate-500 text-xs font-bold leading-relaxed uppercase">Gerencie o consumo dos atletas, abra comandas e controle o estoque em tempo real.</p>
+            </div>
+            <button onClick={() => router.push('/comandas')} className="flex items-center gap-2 text-[10px] font-black uppercase text-[#FFC700] hover:gap-4 transition-all">
+              Abrir PDV <ArrowRight size={14} />
+            </button>
+          </div>
+
+          {/* Módulo 3 */}
+          <div className="bg-slate-900/30 border border-slate-800/50 p-10 rounded-[48px] space-y-6">
+            <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center text-[#FFC700]">
+              <DollarSign size={32} />
+            </div>
+            <div>
+              <h4 className="text-xl font-black uppercase italic leading-none mb-3">Financeiro</h4>
+              <p className="text-slate-500 text-xs font-bold leading-relaxed uppercase">Visualize o lucro líquido, controle despesas mensais e analise o faturamento bruto.</p>
+            </div>
+            <button onClick={() => router.push('/financeiro')} className="flex items-center gap-2 text-[10px] font-black uppercase text-[#FFC700] hover:gap-4 transition-all">
+              Ver Fluxo <ArrowRight size={14} />
+            </button>
+          </div>
+
+        </div>
       </div>
     </div>
   );

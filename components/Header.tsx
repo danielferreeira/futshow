@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { 
   Home, 
   Calendar, 
@@ -10,11 +11,28 @@ import {
   Package, 
   Ticket, 
   CircleDollarSign,
-  LogOut
+  LogOut,
+  Loader2
 } from "lucide-react";
+import { useState } from "react";
 
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  if (pathname === "/login") return null;
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+      window.location.href = "/login"; 
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   const navItems = [
     { name: "Home", href: "/", icon: <Home size={18} /> },
@@ -46,7 +64,7 @@ export default function Header() {
               href={item.href}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                 isActive 
-                ? "bg-[#FFC700] text-black" 
+                ? "bg-[#FFC700] text-black shadow-lg shadow-yellow-500/10" 
                 : "text-slate-400 hover:text-white hover:bg-slate-800/50"
               }`}
             >
@@ -57,23 +75,36 @@ export default function Header() {
         })}
       </div>
 
-      {/* ÁREA DO ADMINISTRADOR */}
+      {/* ÁREA DO ADMINISTRADOR - LINK RESTAURADO */}
       <div className="flex items-center gap-6">
         <Link 
           href="/admin" 
-          className="flex items-center gap-3 group cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex items-center gap-3 group cursor-pointer hover:opacity-80 transition-all"
         >
           <div className="text-right">
-            <p className="text-sm font-black text-white leading-none group-hover:text-[#FFC700] transition-colors uppercase italic">Administrador</p>
-            <p className="text-[10px] font-bold text-[#FFC700] uppercase tracking-widest mt-1">Admin</p>
+            <p className="text-sm font-black text-white leading-none group-hover:text-[#FFC700] transition-colors uppercase italic">
+              Administrador
+            </p>
+            <p className="text-[10px] font-bold text-[#FFC700] uppercase tracking-widest mt-1">
+              Configurações
+            </p>
           </div>
-          <div className="w-10 h-10 bg-[#FFC700] rounded-full flex items-center justify-center text-black font-black text-lg shadow-lg shadow-yellow-500/10">
+          <div className="w-10 h-10 bg-[#FFC700] rounded-full flex items-center justify-center text-black font-black text-lg shadow-lg group-hover:scale-105 transition-transform">
             A
           </div>
         </Link>
 
-        <button className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-xs font-bold">
-          Sair <LogOut size={16} />
+        {/* BOTÃO SAIR */}
+        <button 
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex items-center gap-2 text-slate-400 hover:text-red-500 transition-all text-xs font-bold active:scale-95 disabled:opacity-50"
+        >
+          {isLoggingOut ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <>Sair <LogOut size={16} /></>
+          )}
         </button>
       </div>
     </nav>
