@@ -40,6 +40,13 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const isLoginPage = request.nextUrl.pathname === '/login'
+  
+  //TRAVANDO A ABA CAMPEONATOS
+  const isCampeonatosPage = request.nextUrl.pathname.startsWith('/campeonatos') // Detecta a rota e sub-rotas
+    // NOVA TRAVA: Se tentar acessar campeonatos, manda para a Home
+    if (isCampeonatosPage) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
 
   // 1. Se NÃO tem usuário e NÃO está na página de login -> Redireciona para /login
   if (!user && !isLoginPage) {

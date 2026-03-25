@@ -37,7 +37,7 @@ export default function Header() {
     { name: "Home", href: "/", icon: <Home size={20} /> },
     { name: "Agendar", href: "/agendar", icon: <Calendar size={20} /> },
     { name: "Lista de agendamentos", href: "/lista", icon: <ClipboardList size={20} /> },
-    { name: "Campeonatos", href: "/campeonatos", icon: <Trophy size={20} /> },
+    //{ name: "Campeonatos", href: "/campeonatos", icon: <Trophy size={20} /> },
     { name: "Estoque", href: "/estoque", icon: <Package size={20} /> },
     { name: "Comandas", href: "/comandas", icon: <Ticket size={20} /> },
     { name: "Financeiro", href: "/financeiro", icon: <CircleDollarSign size={20} /> },

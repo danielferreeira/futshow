@@ -40,12 +40,12 @@ export default function DashboardPage() {
         .gte('start_time', today)
         .lte('start_time', today + 'T23:59:59');
 
-      // 3. Torneios em Andamento
+      /*// 3. Torneios em Andamento
       const { count: tourneyCount } = await supabase
         .from('tournaments')
         .select('*', { count: 'exact', head: true })
         .neq('status', 'finalizado');
-
+      */
       // 4. Faturamento do Dia
       const { data: dailySales } = await supabase
         .from('orders')
@@ -58,7 +58,7 @@ export default function DashboardPage() {
       setStats({
         activeOrders: ordersCount || 0,
         bookingsToday: bookingsCount || 0,
-        activeTournaments: tourneyCount || 0,
+        activeTournaments: 0,
         dailyRevenue: revenue
       });
     } catch (error) {
@@ -94,7 +94,7 @@ export default function DashboardPage() {
       </div>
 
       {/* CARDS DE RESUMO OPERACIONAL */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         
         {/* Caixa */}
         <div className="bg-[#0F172A] border-2 border-slate-800 p-8 rounded-[40px] shadow-2xl relative overflow-hidden group">
@@ -123,7 +123,7 @@ export default function DashboardPage() {
           <h3 className="text-3xl font-black text-white italic">{stats.bookingsToday} <span className="text-[10px] text-slate-600 uppercase">Horários</span></h3>
         </div>
 
-        {/* Torneios */}
+        {/* Torneios 
         <div onClick={() => router.push('/campeonatos')} className="bg-[#0F172A] border-2 border-slate-800 p-8 rounded-[40px] shadow-2xl cursor-pointer hover:border-[#FFC700]/50 transition-all relative overflow-hidden group active:scale-95">
           <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform text-[#FFC700]">
             <Target size={120} />
@@ -131,6 +131,7 @@ export default function DashboardPage() {
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Torneios</p>
           <h3 className="text-3xl font-black text-white italic">{stats.activeTournaments} <span className="text-[10px] text-slate-600 uppercase">Ativos</span></h3>
         </div>
+        */}
       </div>
 
       {/* SEÇÃO DE ATALHOS / MÓDULOS */}
