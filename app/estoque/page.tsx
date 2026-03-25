@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
   Plus, Search, Trash2, Edit, X, 
-  Check, Loader2, AlertTriangle, BoxIcon
+  Check, Loader2, AlertTriangle, BoxIcon, ChevronRight
 } from "lucide-react";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -15,10 +15,7 @@ export default function EstoquePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Estados para Exclusão
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<any>(null);
-
   const [currentProduct, setCurrentProduct] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -28,17 +25,7 @@ export default function EstoquePage() {
     min_stock: "5"
   });
 
-  const loadProducts = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('products').select('*').order('name');
-    if (data) setProducts(data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadProducts(); }, [loadProducts]);
-
-  // --- HANDLERS DE EXCLUSÃO ---
-    const [confirmConfig, setConfirmConfig] = useState<{
+  const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
@@ -51,9 +38,18 @@ export default function EstoquePage() {
     variant: "danger",
   });
 
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('products').select('*').order('name');
+    if (data) setProducts(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  // --- LOGICA DE EXCLUSÃO ---
   const handleDeleteClick = (product: any) => {
     setItemToDelete(product);
-    // Primeiro configuramos o modal de pergunta (Danger)
     setConfirmConfig({
       isOpen: true,
       title: "Remover Item",
@@ -65,73 +61,27 @@ export default function EstoquePage() {
 
   const executeDelete = async (product: any) => {
     setIsSaving(true);
-
-    // 1. VERIFICAÇÃO DE VÍNCULO
     const { count } = await supabase
       .from('order_items')
       .select('*', { count: 'exact', head: true })
       .eq('product_id', product.id);
 
     if (count && count > 0) {
-      // 2. SE TIVER VÍNCULO: Transforma o modal em Aviso (Warning)
       setConfirmConfig({
         isOpen: true,
         title: "Ação Bloqueada",
-        message: `Não é possível excluir "${product.name}". Este produto já foi lançado em comandas. Para manter o histórico financeiro, ele deve permanecer no banco.`,
+        message: `Não é possível excluir "${product.name}". Este produto já foi lançado em comandas.`,
         variant: "warning",
-        onConfirm: undefined // Remove a função de confirmar
+        onConfirm: () => setConfirmConfig(prev => ({ ...prev, isOpen: false }))
       });
       setIsSaving(false);
       return;
     }
 
-    // 3. SE ESTIVER LIMPO: Deleta
     await supabase.from('products').delete().eq('id', product.id);
     setConfirmConfig(prev => ({ ...prev, isOpen: false }));
     loadProducts();
     setIsSaving(false);
-  };
-  const handleConfirmDelete = async () => {
-    if (itemToDelete) {
-      setIsSaving(true);
-
-      // 1. VERIFICAÇÃO DE VÍNCULO: Checa se o produto existe em alguma comanda
-      const { count, error: checkError } = await supabase
-        .from('order_items')
-        .select('*', { count: 'exact', head: true })
-        .eq('product_id', itemToDelete.id);
-
-      if (checkError) {
-        alert("Erro ao verificar integridade do produto.");
-        setIsSaving(false);
-        return;
-      }
-
-      // 2. BLOQUEIO: Se o count for maior que zero, impede a exclusão
-      if (count && count > 0) {
-        alert(`Não é possível excluir "${itemToDelete.name}".\n\nEste produto já foi lançado em comandas (ativas ou fechadas). Para manter o histórico financeiro correto, o sistema não permite a exclusão de itens com movimentação.`);
-        setIsConfirmOpen(false);
-        setItemToDelete(null);
-        setIsSaving(false);
-        return;
-      }
-
-      // 3. EXECUÇÃO: Se estiver limpo, exclui
-      const { error: deleteError } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', itemToDelete.id);
-
-      if (!deleteError) {
-        setIsConfirmOpen(false);
-        setItemToDelete(null);
-        loadProducts();
-      } else {
-        alert("Erro ao excluir: " + deleteError.message);
-      }
-      
-      setIsSaving(false);
-    }
   };
 
   // --- GESTÃO DE PRODUTO ---
@@ -153,8 +103,7 @@ export default function EstoquePage() {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.price) return alert("Preencha nome e preço!");
-    
+    if (!formData.name || !formData.price) return;
     setIsSaving(true);
     const payload = {
         name: formData.name,
@@ -182,107 +131,137 @@ export default function EstoquePage() {
   if (loading) return <div className="flex h-screen items-center justify-center bg-[#0A0F1C]"><Loader2 className="animate-spin text-[#FFC700]" size={40} /></div>;
 
   return (
-    <div className="w-full max-w-7xl mx-auto mt-4 space-y-6 pb-20 px-4 text-white">
+    <div className="w-full max-w-7xl mx-auto space-y-4 md:space-y-6 pb-24 px-2 md:px-4 text-white pt-24 md:pt-32">
       
-      {/* HEADER PADRONIZADO */}
-      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-slate-800 rounded-2xl text-[#FFC700]">
-            <BoxIcon size={24}/>
+      {/* HEADER BUSCA E ADICIONAR */}
+      <div className="flex flex-col md:flex-row items-center justify-between bg-[#0F172A] p-4 md:p-6 rounded-[24px] md:rounded-[32px] border border-slate-800 shadow-xl gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="p-2.5 bg-slate-800 rounded-xl text-[#FFC700]">
+            <BoxIcon size={20}/>
           </div>
           <div>
-            <h1 className="text-xl font-black uppercase italic tracking-tighter leading-none">Controle de Estoque</h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest italic mt-1">Gestão de insumos e produtos</p>
+            <h1 className="text-lg md:text-xl font-black uppercase italic leading-none">Estoque</h1>
+            <p className="text-slate-500 text-[9px] md:text-[10px] font-bold uppercase tracking-widest italic mt-1">Arena Futshow</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 text-slate-600" size={16} />
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
             <input 
               type="text" 
               placeholder="Buscar item..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-2xl py-2.5 pl-10 pr-4 text-xs font-bold focus:border-[#FFC700] outline-none transition-all w-64"
+              className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-xs font-bold focus:border-[#FFC700] outline-none italic transition-all"
             />
           </div>
-          <button onClick={() => handleOpenModal()} className="bg-[#FFC700] text-black px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 active:scale-95 transition-all">
+          <button onClick={() => handleOpenModal()} className="w-full sm:w-auto bg-[#FFC700] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
             <Plus size={16} /> Novo Item
           </button>
         </div>
       </div>
 
-      {/* TABELA PREMIUM */}
-      <div className="bg-[#0F172A] border border-slate-800 rounded-[40px] overflow-hidden shadow-2xl">
+      {/* VERSÃO DESKTOP: TABELA */}
+      <div className="hidden md:block bg-[#0F172A] border border-slate-800 rounded-[40px] overflow-hidden shadow-2xl">
         <table className="w-full text-left">
           <thead className="bg-slate-900/50 border-b border-slate-800">
             <tr>
               <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Produto</th>
               <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Preço</th>
               <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-center">Quantidade</th>
-              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-right">Gerenciar</th>
+              <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-right">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/50 text-white">
+          <tbody className="divide-y divide-slate-800/50">
             {filteredProducts.map(p => (
               <tr key={p.id} className="hover:bg-slate-800/20 transition-colors group">
                 <td className="p-6">
                   <p className="font-black uppercase italic text-sm group-hover:text-[#FFC700] transition-colors">{p.name}</p>
                   <span className="text-[9px] text-slate-600 font-bold uppercase">{p.category}</span>
                 </td>
-                <td className="p-6 font-black text-emerald-500 italic">R$ {Number(p.price).toFixed(2)}</td>
+                <td className="p-6 font-black text-emerald-500 italic text-lg">R$ {Number(p.price).toFixed(2)}</td>
                 <td className="p-6 text-center">
-                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl font-black text-xs ${p.stock <= p.min_stock ? 'bg-red-500/10 text-red-500' : 'bg-slate-900 text-slate-400'}`}>
+                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl font-black text-xs ${p.stock <= p.min_stock ? 'bg-red-500/10 text-red-500 ring-1 ring-red-500/20' : 'bg-slate-900 text-slate-400'}`}>
                     {p.stock} un {p.stock <= p.min_stock && <AlertTriangle size={14} className="animate-pulse" />}
                   </div>
                 </td>
                 <td className="p-6 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => handleOpenModal(p)} className="p-2 text-slate-600 hover:text-[#FFC700] transition-colors"><Edit size={18}/></button>
-                    <button onClick={() => handleDeleteClick(p)} className="p-2 text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                    <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-800/50 rounded-xl text-slate-400 hover:text-[#FFC700] transition-all"><Edit size={18}/></button>
+                    <button onClick={() => handleDeleteClick(p)} className="p-3 bg-slate-800/50 rounded-xl text-slate-400 hover:text-red-500 transition-all"><Trash2 size={18}/></button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {filteredProducts.length === 0 && (
-          <div className="p-20 text-center text-slate-600 font-black uppercase italic text-xs">Nenhum produto cadastrado</div>
-        )}
       </div>
 
-      {/* MODAL DE CADASTRO/EDIÇÃO */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
-          <div className="bg-[#0F172A] border border-slate-800 w-full max-w-md rounded-[40px] p-10 shadow-2xl border-t-4 border-t-[#FFC700] animate-in zoom-in duration-200 text-white">
+      {/* VERSÃO MOBILE: CARDS */}
+      <div className="md:hidden space-y-3">
+        {filteredProducts.map(p => (
+          <div key={p.id} className="bg-[#0F172A] border border-slate-800 rounded-[24px] p-5 shadow-lg relative overflow-hidden">
+            {p.stock <= p.min_stock && (
+              <div className="absolute top-0 right-0 bg-red-500 text-white p-1 px-3 rounded-bl-xl">
+                <AlertTriangle size={12} />
+              </div>
+            )}
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="font-black uppercase italic text-base leading-tight">{p.name}</p>
+                <span className="text-[9px] text-slate-600 font-bold uppercase">{p.category}</span>
+              </div>
+              <p className="font-black text-emerald-500 italic">R$ {Number(p.price).toFixed(2)}</p>
+            </div>
             
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                {currentProduct ? 'Editar Produto' : 'Novo Produto'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white"><X size={24}/></button>
+            <div className="flex items-center justify-between gap-4">
+              <div className={`flex-1 flex items-center justify-between p-3 rounded-xl ${p.stock <= p.min_stock ? 'bg-red-500/10 border border-red-500/20' : 'bg-slate-900'}`}>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Estoque</span>
+                <span className={`font-black italic ${p.stock <= p.min_stock ? 'text-red-500' : 'text-white'}`}>{p.stock} un</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleOpenModal(p)} className="p-3 bg-slate-800 rounded-xl text-slate-400"><Edit size={18}/></button>
+                <button onClick={() => handleDeleteClick(p)} className="p-3 bg-slate-800 rounded-xl text-red-500/50"><Trash2 size={18}/></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* MODAL FLUTUANTE (DESIGN PADRÃO FS) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0F172A] w-full max-w-md rounded-[48px] border-2 border-slate-800 border-t-[#FFC700] border-t-4 shadow-2xl p-8 md:p-10 max-h-[90vh] overflow-y-auto no-scrollbar animate-in zoom-in duration-300 text-white relative">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-none">
+                  {currentProduct ? 'Editar Item' : 'Novo Item'}
+                </h2>
+                <p className="text-[#FFC700] text-[9px] font-black mt-2 uppercase tracking-[0.2em] italic">Catálogo Futshow</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-500"><X size={28}/></button>
             </div>
             
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição do Item</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 italic">Nome do Produto</label>
                 <input 
                   autoFocus
                   type="text" 
                   value={formData.name} 
                   onChange={e => setFormData({...formData, name: e.target.value})} 
-                  className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
+                  className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-3xl py-4 px-6 font-bold italic text-sm focus:border-[#FFC700] outline-none" 
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Categoria</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 italic">Categoria</label>
                   <select 
                     value={formData.category} 
                     onChange={e => setFormData({...formData, category: e.target.value})} 
-                    className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700] appearance-none"
+                    className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700] appearance-none italic text-sm"
                   >
                     <option value="Bebida">Bebida</option>
                     <option value="Lanche">Lanche</option>
@@ -291,34 +270,30 @@ export default function EstoquePage() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço (R$)</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 italic">Preço (R$)</label>
                   <input 
-                    type="number" 
-                    step="0.01" 
-                    value={formData.price} 
+                    type="number" step="0.01" value={formData.price} 
                     onChange={e => setFormData({...formData, price: e.target.value})} 
-                    className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
+                    className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700] text-emerald-500" 
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Qtd Atual</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 italic">Qtd Atual</label>
                   <input 
-                    type="number" 
-                    value={formData.stock} 
+                    type="number" value={formData.stock} 
                     onChange={e => setFormData({...formData, stock: e.target.value})} 
-                    className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
+                    className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 leading-none">Estoque Mín.</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 italic">Mínimo</label>
                   <input 
-                    type="number" 
-                    value={formData.min_stock} 
+                    type="number" value={formData.min_stock} 
                     onChange={e => setFormData({...formData, min_stock: e.target.value})} 
-                    className="w-full bg-slate-900 border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
+                    className="w-full bg-[#0B1120] border-2 border-slate-800 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#FFC700]" 
                   />
                 </div>
               </div>
@@ -326,17 +301,15 @@ export default function EstoquePage() {
               <button 
                 onClick={handleSave} 
                 disabled={isSaving} 
-                className="w-full bg-[#FFC700] text-black font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
+                className="w-full bg-[#FFC700] text-black font-black py-5 rounded-3xl uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
               >
-                {isSaving ? <Loader2 className="animate-spin mx-auto" size={20}/> : 'Salvar no Sistema'}
+                {isSaving ? <Loader2 className="animate-spin mx-auto" size={20}/> : 'Salvar Produto'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* COMPONENTE DE CONFIRMAÇÃO DE EXCLUSÃO */}
-     
       <ConfirmModal 
         isOpen={confirmConfig.isOpen}
         onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
